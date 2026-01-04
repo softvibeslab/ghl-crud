@@ -1,14 +1,17 @@
 import { z } from 'zod'
+import type { Json } from '@/types/database'
 
-// Common schemas
-const jsonSchema = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.null(),
-  z.record(z.unknown()),
-  z.array(z.unknown()),
-])
+// Common schemas - properly typed for Supabase Json compatibility
+const jsonSchema: z.ZodType<Json> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.record(jsonSchema),
+    z.array(jsonSchema),
+  ])
+)
 
 // Location schemas
 export const locationCreateSchema = z.object({

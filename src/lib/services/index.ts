@@ -231,7 +231,7 @@ export class OpportunityService extends BaseCRUDService<GHLOpportunity, GHLOppor
       .eq('location_id', locationId)
 
     if (status) {
-      query = query.eq('status', status)
+      query = query.eq('status', status as 'open' | 'won' | 'lost' | 'abandoned')
     }
 
     const { data, error } = await query
@@ -240,7 +240,7 @@ export class OpportunityService extends BaseCRUDService<GHLOpportunity, GHLOppor
       return { data: null, error: error.message }
     }
 
-    const total = (data ?? []).reduce((sum, opp) => sum + (opp.monetary_value || 0), 0)
+    const total = (data ?? []).reduce((sum, opp: { monetary_value: number }) => sum + (opp.monetary_value || 0), 0)
     return { data: total, error: null }
   }
 }
@@ -487,13 +487,13 @@ export class InvoiceService extends BaseCRUDService<GHLInvoice, GHLInvoiceInsert
       .from('ghl_invoices')
       .select('total_amount')
       .eq('location_id', locationId)
-      .eq('status', 'paid')
+      .eq('status', 'paid' as const)
 
     if (error) {
       return { data: null, error: error.message }
     }
 
-    const total = (data ?? []).reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+    const total = (data ?? []).reduce((sum, inv: { total_amount: number }) => sum + (inv.total_amount || 0), 0)
     return { data: total, error: null }
   }
 }
