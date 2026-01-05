@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServices } from '@/lib/services'
 import {
@@ -10,13 +10,26 @@ import {
   pipelineUpdateSchema,
   validateBody,
 } from '@/lib/api'
+import {
+  requireAuth,
+  requirePermission,
+  canAccessLocation,
+} from '@/lib/rbac'
 
 interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-// GET /api/pipelines/[id] - Get a single pipeline
+// GET /api/pipelines/[id] - Get a single pipeline (RBAC protected)
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  // Check authentication
+  const authResult = await requireAuth(request)
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { context } = authResult
+
   try {
     const { id } = await params
     const supabase = await createClient()
@@ -35,6 +48,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return notFoundResponse('Pipeline not found')
     }
 
+    // Check location access
+    const pipeline = result.data as typeof result.data & { location_id?: string; tenant_id?: string }
+    if (pipeline.location_id && !canAccessLocation(context, pipeline.location_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this pipeline' },
+        { status: 403 }
+      )
+    }
+
+    // Check tenant access
+    if (pipeline.tenant_id && pipeline.tenant_id !== context.tenant.id) {
+      return notFoundResponse('Pipeline not found')
+    }
+
     return successResponse(result.data)
   } catch (error) {
     console.error('Error fetching pipeline:', error)
@@ -42,14 +69,54 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PUT /api/pipelines/[id] - Update a pipeline
+// PUT /api/pipelines/[id] - Update a pipeline (RBAC protected)
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  // Check permission to update pipelines
+  const authResult = await requirePermission(request, 'pipelines', 'update')
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { context } = authResult
+
   try {
     const { id } = await params
     const supabase = await createClient()
     const services = createServices(supabase)
 
+    // First fetch the pipeline to check access
+    const existingResult = await services.pipelines.findById(id)
+    if (existingResult.error || !existingResult.data) {
+      return notFoundResponse('Pipeline not found')
+    }
+
+    const existingPipeline = existingResult.data as typeof existingResult.data & { location_id?: string; tenant_id?: string }
+
+    // Check tenant access
+    if (existingPipeline.tenant_id && existingPipeline.tenant_id !== context.tenant.id) {
+      return notFoundResponse('Pipeline not found')
+    }
+
+    // Check location access
+    if (existingPipeline.location_id && !canAccessLocation(context, existingPipeline.location_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this pipeline' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
+
+    // If changing location, verify access to new location
+    if (body.location_id && body.location_id !== existingPipeline.location_id) {
+      if (!canAccessLocation(context, body.location_id)) {
+        return NextResponse.json(
+          { error: 'Access denied to target location' },
+          { status: 403 }
+        )
+      }
+    }
+
     const validation = validateBody(pipelineUpdateSchema, body)
 
     if (!validation.success) {
@@ -72,12 +139,41 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// DELETE /api/pipelines/[id] - Delete a pipeline
+// DELETE /api/pipelines/[id] - Delete a pipeline (RBAC protected - admin only)
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  // Check permission to delete pipelines
+  const authResult = await requirePermission(request, 'pipelines', 'delete')
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { context } = authResult
+
   try {
     const { id } = await params
     const supabase = await createClient()
     const services = createServices(supabase)
+
+    // First fetch the pipeline to check access
+    const existingResult = await services.pipelines.findById(id)
+    if (existingResult.error || !existingResult.data) {
+      return notFoundResponse('Pipeline not found')
+    }
+
+    const existingPipeline = existingResult.data as typeof existingResult.data & { location_id?: string; tenant_id?: string }
+
+    // Check tenant access
+    if (existingPipeline.tenant_id && existingPipeline.tenant_id !== context.tenant.id) {
+      return notFoundResponse('Pipeline not found')
+    }
+
+    // Check location access
+    if (existingPipeline.location_id && !canAccessLocation(context, existingPipeline.location_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this pipeline' },
+        { status: 403 }
+      )
+    }
 
     const result = await services.pipelines.delete(id)
 

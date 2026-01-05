@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServices } from '@/lib/services'
 import {
@@ -10,13 +10,27 @@ import {
   appointmentUpdateSchema,
   validateBody,
 } from '@/lib/api'
+import {
+  requireAuth,
+  requirePermission,
+  canAccessLocation,
+  canAccessRecord,
+} from '@/lib/rbac'
 
 interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-// GET /api/appointments/[id] - Get a single appointment
+// GET /api/appointments/[id] - Get a single appointment (RBAC protected)
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  // Check authentication
+  const authResult = await requireAuth(request)
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { context } = authResult
+
   try {
     const { id } = await params
     const supabase = await createClient()
@@ -35,6 +49,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return notFoundResponse('Appointment not found')
     }
 
+    // Check location access
+    const appointment = result.data as typeof result.data & { location_id?: string; tenant_id?: string }
+    if (appointment.location_id && !canAccessLocation(context, appointment.location_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this appointment' },
+        { status: 403 }
+      )
+    }
+
+    // Check tenant access
+    if (appointment.tenant_id && appointment.tenant_id !== context.tenant.id) {
+      return notFoundResponse('Appointment not found')
+    }
+
+    // For agents, check record-level access
+    if (context.user.role === 'agent' && !canAccessRecord(appointment, context)) {
+      return NextResponse.json(
+        { error: 'Access denied to this appointment' },
+        { status: 403 }
+      )
+    }
+
     return successResponse(result.data)
   } catch (error) {
     console.error('Error fetching appointment:', error)
@@ -42,14 +78,62 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PUT /api/appointments/[id] - Update an appointment
+// PUT /api/appointments/[id] - Update an appointment (RBAC protected)
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  // Check permission to update appointments
+  const authResult = await requirePermission(request, 'appointments', 'update')
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { context } = authResult
+
   try {
     const { id } = await params
     const supabase = await createClient()
     const services = createServices(supabase)
 
+    // First fetch the appointment to check access
+    const existingResult = await services.appointments.findById(id)
+    if (existingResult.error || !existingResult.data) {
+      return notFoundResponse('Appointment not found')
+    }
+
+    const existingAppointment = existingResult.data as typeof existingResult.data & { location_id?: string; tenant_id?: string }
+
+    // Check tenant access
+    if (existingAppointment.tenant_id && existingAppointment.tenant_id !== context.tenant.id) {
+      return notFoundResponse('Appointment not found')
+    }
+
+    // Check location access
+    if (existingAppointment.location_id && !canAccessLocation(context, existingAppointment.location_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this appointment' },
+        { status: 403 }
+      )
+    }
+
+    // For agents, check record-level access
+    if (context.user.role === 'agent' && !canAccessRecord(existingAppointment, context)) {
+      return NextResponse.json(
+        { error: 'Access denied to this appointment' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
+
+    // If changing location, verify access to new location
+    if (body.location_id && body.location_id !== existingAppointment.location_id) {
+      if (!canAccessLocation(context, body.location_id)) {
+        return NextResponse.json(
+          { error: 'Access denied to target location' },
+          { status: 403 }
+        )
+      }
+    }
+
     const validation = validateBody(appointmentUpdateSchema, body)
 
     if (!validation.success) {
@@ -72,12 +156,41 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// DELETE /api/appointments/[id] - Delete an appointment
+// DELETE /api/appointments/[id] - Delete an appointment (RBAC protected - admin only)
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  // Check permission to delete appointments
+  const authResult = await requirePermission(request, 'appointments', 'delete')
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { context } = authResult
+
   try {
     const { id } = await params
     const supabase = await createClient()
     const services = createServices(supabase)
+
+    // First fetch the appointment to check access
+    const existingResult = await services.appointments.findById(id)
+    if (existingResult.error || !existingResult.data) {
+      return notFoundResponse('Appointment not found')
+    }
+
+    const existingAppointment = existingResult.data as typeof existingResult.data & { location_id?: string; tenant_id?: string }
+
+    // Check tenant access
+    if (existingAppointment.tenant_id && existingAppointment.tenant_id !== context.tenant.id) {
+      return notFoundResponse('Appointment not found')
+    }
+
+    // Check location access
+    if (existingAppointment.location_id && !canAccessLocation(context, existingAppointment.location_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this appointment' },
+        { status: 403 }
+      )
+    }
 
     const result = await services.appointments.delete(id)
 
