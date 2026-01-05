@@ -527,7 +527,7 @@ export class InitialSyncService {
           tenant_id: tenantId,
           location_id: locationId,
           entity_type: entityType,
-          status: 'idle',
+          status: 'healthy',
           last_sync_at: now.toISOString(),
           next_sync_at: nextSync.toISOString(),
           records_synced: 0,

@@ -11,7 +11,7 @@ import type { Json } from './database'
 
 export type UserRole = 'admin' | 'manager' | 'agent'
 export type TenantStatus = 'active' | 'suspended' | 'pending'
-export type SyncStatus = 'idle' | 'syncing' | 'error' | 'completed'
+export type SyncStatus = 'pending' | 'syncing' | 'healthy' | 'degraded' | 'error'
 export type OAuthProvider = 'agency' | 'location' | 'marketplace'
 export type PermissionAction = 'create' | 'read' | 'update' | 'delete'
 

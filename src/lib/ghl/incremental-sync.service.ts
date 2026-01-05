@@ -47,7 +47,7 @@ export class IncrementalSyncService {
       .from('sync_status')
       .select('tenant_id, location_id, entity_type, last_sync_at, next_sync_at')
       .lte('next_sync_at', now.toISOString())
-      .eq('status', 'idle')
+      .eq('status', 'healthy')
       .order('next_sync_at', { ascending: true })
       .limit(limit)
 
@@ -121,7 +121,7 @@ export class IncrementalSyncService {
         tenantId,
         locationId,
         entityType,
-        'idle',
+        'healthy',
         recordsSynced,
         null,
         nextSyncAt
@@ -431,7 +431,7 @@ export class IncrementalSyncService {
     tenantId: string,
     locationId: string,
     entityType: string,
-    status: 'idle' | 'syncing' | 'error',
+    status: 'pending' | 'syncing' | 'healthy' | 'degraded' | 'error',
     recordsSynced?: number,
     errorMessage?: string | null,
     nextSyncAt?: Date
@@ -444,7 +444,7 @@ export class IncrementalSyncService {
         location_id: locationId,
         entity_type: entityType,
         status,
-        last_sync_at: status === 'idle' ? now.toISOString() : undefined,
+        last_sync_at: status === 'healthy' ? now.toISOString() : undefined,
         next_sync_at: nextSyncAt?.toISOString(),
         records_synced: recordsSynced,
         error_message: errorMessage,

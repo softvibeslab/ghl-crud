@@ -54,7 +54,9 @@ export async function GET(request: NextRequest) {
     const summary = {
       total: syncStatus?.length || 0,
       syncing: syncStatus?.filter(s => s.status === 'syncing').length || 0,
-      idle: syncStatus?.filter(s => s.status === 'idle').length || 0,
+      healthy: syncStatus?.filter(s => s.status === 'healthy').length || 0,
+      pending: syncStatus?.filter(s => s.status === 'pending').length || 0,
+      degraded: syncStatus?.filter(s => s.status === 'degraded').length || 0,
       error: syncStatus?.filter(s => s.status === 'error').length || 0,
       lastSync: syncStatus?.[0]?.last_sync_at || null,
       totalRecordsSynced: syncStatus?.reduce((sum, s) => sum + (s.records_synced || 0), 0) || 0,

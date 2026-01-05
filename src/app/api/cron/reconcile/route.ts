@@ -164,7 +164,7 @@ async function reconcileContactCounts(
       {
         location_id: locationId,
         entity_type: 'contacts',
-        status: 'idle',
+        status: 'pending',
         next_sync_at: new Date().toISOString(), // Immediate resync
         error_message: `Discrepancy: local=${localCount}, ghl=${ghlTotal}`,
       },
@@ -204,7 +204,7 @@ async function reconcileOpportunityCounts(
       {
         location_id: locationId,
         entity_type: 'opportunities',
-        status: 'idle',
+        status: 'pending',
         next_sync_at: new Date().toISOString(),
         error_message: `Discrepancy: local=${localCount}, ghl=${ghlTotal}`,
       },
