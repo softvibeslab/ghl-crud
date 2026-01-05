@@ -142,8 +142,7 @@ CREATE TABLE IF NOT EXISTS public.permission_overrides (
 
 CREATE INDEX idx_permission_overrides_user ON public.permission_overrides(user_id);
 CREATE INDEX idx_permission_overrides_entity ON public.permission_overrides(entity_type);
-CREATE INDEX idx_permission_overrides_active ON public.permission_overrides(expires_at)
-    WHERE expires_at IS NULL OR expires_at > NOW();
+CREATE INDEX idx_permission_overrides_expires ON public.permission_overrides(expires_at);
 
 COMMENT ON TABLE public.permission_overrides IS 'Override default role permissions for specific users';
 
